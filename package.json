@@ -1,6 +1,7 @@
 {
   "name": "queridometro-bot",
   "version": "1.0.0",
+  "description": "Bot Queridômetro Discord",
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
