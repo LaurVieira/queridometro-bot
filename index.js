@@ -1,20 +1,20 @@
 const { 
   Client, 
   GatewayIntentBits, 
-  Partials, 
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle 
 } = require("discord.js");
 
+const cron = require("node-cron");
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Channel]
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages
+  ]
 });
 
 const CANAL_RESULTADO_ID = "1470925141927264338";
@@ -28,119 +28,107 @@ const PARTICIPANTES = {
   "285603510660366347": "Priska"
 };
 
-const VOTANTES = Object.keys(PARTICIPANTES);
+const EMOJIS = ["❤","🌼","💣","🍪","🐍","🤮","💼","🤥","💔"];
 
-const EMOJIS = ["❤️","🌼","💣","🍪","🐍","🤮","💼","🤥","💔"];
-
-let votos = {};
-let votou = new Set();
-let filaVotacao = {};
 let votacaoAberta = false;
+let votos = {};
+let votosFeitos = new Set();
 
-function resetarVotacao() {
-  votos = {};
-  votou.clear();
+function iniciarVotacao() {
   votacaoAberta = true;
+  votos = {};
+  votosFeitos.clear();
 
   for (const id in PARTICIPANTES) {
     votos[id] = {};
     EMOJIS.forEach(e => votos[id][e] = 0);
   }
+
+  const canal = client.channels.cache.get(CANAL_RESULTADO_ID);
+  if (canal) canal.send("🟢 **QUERIDÔMETRO ABERTO!** Vote por DM usando `!votar`");
 }
 
-async function enviarResultado(guild) {
-  const canal = guild.channels.cache.get(CANAL_RESULTADO_ID);
-  if (!canal) return;
+function encerrarVotacao() {
+  votacaoAberta = false;
+  const canal = client.channels.cache.get(CANAL_RESULTADO_ID);
 
-  let texto = "📊 **RESULTADO DO QUERIDÔMETRO** 📊\n\n";
+  let texto = "📊 **RESULTADO DO QUERIDÔMETRO**\n\n";
 
   for (const id in votos) {
     texto += `**${PARTICIPANTES[id]}**\n`;
     for (const emoji in votos[id]) {
       texto += `${emoji} → ${votos[id][emoji]}\n`;
     }
-    txt += "\n";
+    texto += "\n";
   }
 
-  canal.send(texto);
+  if (canal) canal.send(texto);
 }
 
-client.once("ready", () => {
-  console.log(`🤖 Online como ${client.user.tag}`);
-  resetarVotacao();
+cron.schedule("0 12 * * *", () => {
+  iniciarVotacao();
+}, { timezone: "America/Sao_Paulo" });
 
-  setInterval(() => {
-    const agora = new Date();
-    if (agora.getHours() === 12 && agora.getMinutes() === 0) {
-      resetarVotacao();
-    }
-  }, 60000);
+client.on("ready", () => {
+  console.log(`🤖 Bot online como ${client.user.tag}`);
 });
 
-client.on("messageCreate", async (msg) => {
-  if (msg.author.bot) return;
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
 
-  if (msg.content === "!forcarresultado") {
-    if (!msg.member?.permissions.has("Administrator")) return;
-    await enviarResultado(msg.guild);
-    votacaoAberta = false;
-    return;
+  if (message.content === "!forcarresultado") {
+    encerrarVotacao();
   }
 
-  if (msg.content === "!votar") {
-    if (!votacaoAberta) return msg.reply("⛔ Votação fechada.");
-    if (!VOTANTES.includes(msg.author.id)) return msg.reply("❌ Você não pode votar.");
-    if (votou.has(msg.author.id)) return msg.reply("⚠️ Você já votou hoje.");
+  if (message.content === "!votar") {
+    if (!votacaoAberta) return message.reply("⛔ Votação fechada.");
+    if (!PARTICIPANTES[message.author.id]) return message.reply("⛔ Você não pode votar.");
+    if (votosFeitos.has(message.author.id)) return message.reply("⛔ Você já votou hoje.");
 
-    filaVotacao[msg.author.id] = Object.keys(PARTICIPANTES)
-      .filter(id => id !== msg.author.id);
+    const participantes = Object.keys(PARTICIPANTES).filter(id => id !== message.author.id);
+    let index = 0;
 
-    msg.reply("📩 Te chamei no privado!");
-    enviarProximo(msg.author);
+    const enviar = async () => {
+      const alvoId = participantes[index];
+      const row = new ActionRowBuilder();
+
+      EMOJIS.forEach(e => {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`${alvoId}|${e}`)
+            .setEmoji(e)
+            .setStyle(ButtonStyle.Secondary)
+        );
+      });
+
+      await message.author.send({
+        content: `Vote em **${PARTICIPANTES[alvoId]}**`,
+        components: [row]
+      });
+    };
+
+    await enviar();
+
+    client.on("interactionCreate", async (i) => {
+      if (!i.isButton()) return;
+      if (i.user.id !== message.author.id) return;
+
+      const [alvo, emoji] = i.customId.split("|");
+      votos[alvo][emoji]++;
+      index++;
+
+      if (index >= participantes.length) {
+        votosFeitos.add(i.user.id);
+        await i.update({ content: "✅ Voto finalizado!", components: [] });
+
+        if (votosFeitos.size === Object.keys(PARTICIPANTES).length) {
+          encerrarVotacao();
+        }
+      } else {
+        await i.update({ content: `Vote em **${PARTICIPANTES[participantes[index]]}**`, components: i.message.components });
+      }
+    });
   }
 });
 
-async function enviarProximo(user) {
-  const fila = filaVotacao[user.id];
-  if (!fila || fila.length === 0) {
-    votou.add(user.id);
-    user.send("✅ Voto finalizado!");
-
-    if (votou.size === VOTANTES.length) {
-      enviarResultado(client.guilds.cache.first());
-      votacaoAberta = false;
-    }
-    return;
-  }
-
-  const alvoId = fila[0];
-  const nome = PARTICIPANTES[alvoId];
-
-  const row = new ActionRowBuilder();
-  EMOJIS.forEach(e => {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`voto_${alvoId}_${e}`)
-        .setLabel(e)
-        .setStyle(ButtonStyle.Secondary)
-    );
-  });
-
-  user.send({
-    content: `Vote para **${nome}**`,
-    components: [row]
-  });
-}
-
-client.on("interactionCreate", async (i) => {
-  if (!i.isButton()) return;
-
-  const [_, alvo, emoji] = i.customId.split("_");
-  votos[alvo][emoji]++;
-  filaVotacao[i.user.id].shift();
-
-  await i.update({ content: "✅ Registrado", components: [] });
-  enviarProximo(i.user);
-});
-
-client.login(process.env.TOKEN);
+client.login(process.env.DISCORD_TOKEN);
