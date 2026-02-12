@@ -14,12 +14,12 @@ const client = new Client({
 const TOKEN_DO_BOT = "TOKEN DISCORD";
 
 const PARTICIPANTES = {
-  "550493155565240321": "Khloe",
-  "231466178600632320": "Fernanda",
-  "527485966420803604": "Kehlani",
-  "481435037200416779": "Hinata",
-  "1183812356795531404": "Mia",
-  "285603510660366347": "Priska"
+  "ID DISCORD": "Khloe",
+  "ID DISCORD": "Fernanda",
+  "ID DISCORD": "Kehlani",
+  "ID DISCORD": "Hinata",
+  "ID DISCORD": "Mia",
+  "ID DISCORD": "Priska"
 };
 
 const EMOJIS = ["❤","🌼","💣","🍪","🐍","🤮","💼","🤥","💔"];
