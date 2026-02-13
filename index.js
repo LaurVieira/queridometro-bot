@@ -40,7 +40,7 @@ function resetarVotacao() {
 }
 
 function enviarResultado(canal) {
-  let resultado = "📊 **RESULTADO DO QUERIDÔMETRO (ANÔNIMO)** 📊\n\n";
+  let resultado = "📊 **RESULTADO DO QUERIDÔMETRO** 📊\n\n";
   for (let id in PARTICIPANTES) {
     resultado += `**${PARTICIPANTES[id].toUpperCase()} RECEBEU:**\n`;
     let temVoto = false;
